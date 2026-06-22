@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SpookFi | Ghostly Trading</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="logo">
+                <i class="ph-fill ph-ghost" style="font-size: 2rem; color: var(--accent-primary);"></i>
+                <span style="font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 1.5rem;">SpookFi</span>
+            </div>
+            
+            <ul class="nav-links">
+                <li class="nav-item active" data-tab="dashboard">
+                    <i class="ph ph-squares-four"></i> Dashboard
+                </li>
+
+                <li class="nav-item" data-tab="roadmap">
+                    <i class="ph ph-map-trifold"></i> Roadmap
+                </li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <button id="theme-toggle" class="theme-toggle" aria-label="Toggle Theme">
+                    <i class="ph ph-sun" id="theme-icon-light"></i>
+                    <i class="ph ph-moon" id="theme-icon-dark" style="display: none;"></i>
+                    <span id="theme-text">Light Mode</span>
+                </button>
+                <div class="system-status mt-2">
+                    <div class="status-indicator live"></div>
+                    <span>Engine Online</span>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="content-area">
+            
+            <!-- Dashboard Tab -->
+            <section id="dashboard" class="tab-content active">
+                <header>
+                    <div class="header-content">
+                        <h1>Overview</h1>
+                        <p>Real-time trading performance and system metrics.</p>
+                    </div>
+                </header>
+
+                <div class="stats-grid">
+                    <div class="stat-card panel">
+                        <div class="stat-header">
+                            <h3>Daily Loot</h3>
+                            <i class="ph-fill ph-currency-dollar"></i>
+                        </div>
+                        <div class="value positive" id="dash-pnl">+₹0.00</div>
+                    </div>
+                    <div class="stat-card panel">
+                        <div class="stat-header">
+                            <h3>Vibe Check</h3>
+                            <i class="ph-fill ph-magic-wand"></i>
+                        </div>
+                        <div class="value" id="dash-winrate">0.0%</div>
+                    </div>
+                    <div class="stat-card panel">
+                        <div class="stat-header">
+                            <h3>Active Haunts</h3>
+                            <i class="ph-fill ph-ghost"></i>
+                        </div>
+                        <div class="value" id="dash-positions-count">0</div>
+                    </div>
+                </div>
+
+                <div class="stats-grid mt-4">
+                    <div class="stat-card panel">
+                        <div class="stat-header">
+                            <h3>Current Realm</h3>
+                            <i class="ph-fill ph-globe-hemisphere-east"></i>
+                        </div>
+                        <div class="value" id="dash-regime">INIT</div>
+                    </div>
+                    <div class="stat-card panel" style="grid-column: span 2;">
+                        <div class="stat-header">
+                            <h3>Spooky Targets</h3>
+                            <i class="ph-fill ph-crosshair"></i>
+                        </div>
+                        <div class="value" id="dash-hunted" style="font-size: 1.2rem; font-weight: 500;">Scanning Universe...</div>
+                    </div>
+                </div>
+
+                <div class="positions-panel panel mt-4">
+                    <div class="panel-header">
+                        <h2>Ghost Bags</h2>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Token / Ticker</th>
+                                    <th>Side</th>
+                                    <th class="text-right">Unrealized Loot</th>
+                                </tr>
+                            </thead>
+                            <tbody id="positions-tbody">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+
+            <!-- Roadmap Tab -->
+            <section id="roadmap" class="tab-content">
+                <header>
+                    <h1>Roadmap</h1>
+                    <p>Development stages and milestone tracking.</p>
+                </header>
+
+                <div class="roadmap-timeline panel" id="roadmap-container">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

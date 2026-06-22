@@ -1,0 +1,45 @@
+{
+    "alpaca": {
+        "api_key": "",
+        "secret_key": "",
+        "base_url": "https://paper-api.alpaca.markets",
+        "trading_mode": "paper"
+    },
+    "universe": {
+        "symbols": [
+            "RELIANCE.NS",
+            "TCS.NS",
+            "HDFCBANK.NS",
+            "INFY.NS",
+            "ICICIBANK.NS",
+            "SBIN.NS",
+            "BHARTIARTL.NS",
+            "ITC.NS",
+            "LART.NS",
+            "BAJFINANCE.NS"
+        ],
+        "crypto_symbols": []
+    },
+    "risk": {
+        "max_position_size": 0.1,
+        "max_daily_drawdown": 0.05,
+        "stop_loss_atr_multiplier": 2.0,
+        "take_profit_atr_multiplier": 4.0,
+        "risk_per_trade": 0.01
+    },
+    "model": {
+        "model_dir": "models",
+        "update_frequency_hours": 24,
+        "confidence_threshold": 0.65
+    },
+    "features": {
+        "feature_names": [
+            "vwap_deviation", "vwap_slope", "price_vs_vwap_std",
+            "relative_volume", "volume_roc", "obv_divergence",
+            "rsi_14", "macd_histogram", "bb_percent_b", "stochastic_k",
+            "atr_14_norm", "adx_14", "rolling_volatility_15m",
+            "return_1m", "return_5m", "return_15m", "rolling_zscore_30m",
+            "time_sin", "time_cos", "minutes_since_open"
+        ]
+    }
+}

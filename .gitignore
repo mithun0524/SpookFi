@@ -1,0 +1,28 @@
+# Environment
+.env
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Data & Models (too large for git)
+data_cache/
+models/*.joblib
+models/*.json
+!models/.gitkeep
+
+# Logs
+logs/*.log
+logs/*.jsonl
+!logs/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
