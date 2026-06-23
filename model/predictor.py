@@ -43,25 +43,26 @@ class Predictor:
             
         start_time = time.time()
         
-        # Ensure features are in the exact order
+        # Ensure features are in the exact order and wrap in a DataFrame to avoid sklearn warnings
         try:
-            feature_array = np.array([[features[f] for f in self.feature_names]])
+            feature_df = pd.DataFrame([[features[f] for f in self.feature_names]], columns=self.feature_names)
         except KeyError as e:
             logger.error(f"Missing feature: {e}. Returning HOLD.")
             return 'HOLD', 0.0
             
         # Sanitize infinities
-        feature_array = np.nan_to_num(feature_array, nan=0.0, posinf=0.0, neginf=0.0)
+        feature_df = feature_df.replace([np.inf, -np.inf], np.nan).fillna(0.0)
             
-        # Scale features
-        scaled_features = self.scaler.transform(feature_array)
+        # Scale features and convert back to DataFrame to preserve feature names for the models
+        scaled_array = self.scaler.transform(feature_df)
+        scaled_df = pd.DataFrame(scaled_array, columns=self.feature_names)
         
         votes = []
         confidences = []
         
         # Poll each model
         for name, model in self.models.items():
-            probs = model.predict_proba(scaled_features)[0]
+            probs = model.predict_proba(scaled_df)[0]
             class_idx = np.argmax(probs)
             signal = self.signal_map[class_idx]
             confidence = probs[class_idx]
