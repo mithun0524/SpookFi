@@ -1,47 +1,88 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-cyber-bg: #0a0a0c;
+  --color-cyber-panel: rgba(255, 255, 255, 0.03);
+  --color-cyber-border: rgba(255, 255, 255, 0.08);
+  --color-cyber-accent: #22d3ee;
+  --color-cyber-danger: #f43f5e;
+  --color-cyber-text: #ffffff;
+  
+  --color-luxury-bg: #0f1115;
+  --color-luxury-panel: #15181e;
+  --color-luxury-border: #2c2e33;
+  --color-luxury-accent: #d4af37;
+  --color-luxury-danger: #ff4d4d;
+  --color-luxury-text: #f2f2f2;
+  
+  --font-display: Syne, sans-serif;
+  --font-body: Outfit, sans-serif;
+}
 
 @layer base {
   body {
-    @apply font-body antialiased min-h-screen text-cyber-text;
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
   }
   
   h1, h2, h3, h4, h5, h6 {
-    @apply font-display;
+    font-family: var(--font-display);
   }
 }
 
 /* Base App Container - Cyberpunk Theme Default */
 .theme-cyber {
-  @apply bg-cyber-bg text-cyber-text;
+  background-color: var(--color-cyber-bg);
+  color: var(--color-cyber-text);
   background-image: 
     radial-gradient(circle at 15% 15%, rgba(79, 70, 229, 0.15) 0%, transparent 40%),
     radial-gradient(circle at 85% 85%, rgba(217, 70, 239, 0.1) 0%, transparent 40%);
 }
 
 .theme-luxury {
-  @apply bg-luxury-bg text-luxury-text;
+  background-color: var(--color-luxury-bg);
+  color: var(--color-luxury-text);
   background-image: 
     radial-gradient(circle at 50% 0%, rgba(212, 175, 55, 0.05) 0%, transparent 50%);
 }
 
 /* Glassmorphism Panels */
 .glass-panel {
-  @apply backdrop-blur-xl border border-white/5 bg-white/5 rounded-2xl overflow-hidden shadow-2xl;
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--color-cyber-border);
+  background-color: var(--color-cyber-panel);
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
 }
 
 .theme-luxury .glass-panel {
-  @apply bg-luxury-panel border-luxury-border shadow-none;
+  background-color: var(--color-luxury-panel);
+  border-color: var(--color-luxury-border);
+  box-shadow: none;
 }
 
 /* Typography Overrides */
 .gradient-text {
-  @apply bg-clip-text text-transparent bg-gradient-to-r;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(to right, var(--color-cyber-accent), #d946ef);
 }
-.theme-cyber .gradient-text {
-  @apply from-cyber-accent to-fuchsia-500;
-}
+
 .theme-luxury .gradient-text {
-  @apply from-luxury-accent to-amber-200;
+  background-image: linear-gradient(to right, var(--color-luxury-accent), #fde68a);
+}
+
+/* Hide scrollbar for tables */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.1);
+  border-radius: 10px;
 }

@@ -3,6 +3,10 @@ import numpy as np
 from loguru import logger
 import time
 from collections import Counter
+import warnings
+
+warnings.filterwarnings("ignore", message="X does not have valid feature names")
+warnings.filterwarnings("ignore", message="X has feature names")
 
 from config import CONFIG
 from model.trainer import load_model
