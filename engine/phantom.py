@@ -4,6 +4,7 @@ import time
 from datetime import datetime
 from loguru import logger
 from pathlib import Path
+import pandas as pd
 
 from config import CONFIG
 from data.stream import MarketDataStream
@@ -33,12 +34,13 @@ class PhantomEngine:
         # Feature Engines (one per symbol to maintain state)
         self.feature_engines = {
             symbol: FeatureEngine(symbol) 
-            for symbol in CONFIG.universe.symbols
+            for symbol in (CONFIG.universe.symbols + CONFIG.universe.crypto_symbols)
         }
         
         # State
         self.is_running = False
-        
+        self._last_save_time = 0.0  # epoch seconds of last state save
+
         # Setup state saving for dashboard
         self.state_file = Path(CONFIG.log.log_dir) / "phantom_state.json"
         self.state_file.parent.mkdir(exist_ok=True)
@@ -54,6 +56,11 @@ class PhantomEngine:
         
         # 2. Predict Signal
         signal, confidence = self.predictor.predict(features)
+        
+        # Capture latest signal for dashboard
+        if not hasattr(self, 'latest_signals'):
+            self.latest_signals = {}
+        self.latest_signals[symbol] = {'signal': signal, 'confidence': float(confidence)}
         
         # 3. Get required metrics for risk management
         # Note: if feature engine hasn't warmed up, these might be 0
@@ -99,7 +106,8 @@ class PhantomEngine:
                            side=order_params['side'],
                            entry_price=current_price,
                            qty=order_params['qty'],
-                           stop_loss=order_params['stop_loss']
+                           stop_loss=order_params['stop_loss'],
+                           take_profit=order_params.get('take_profit'),
                        )
 
     async def _event_loop(self):
@@ -111,9 +119,11 @@ class PhantomEngine:
                 await self.process_bar(bar)
                 self.queue.task_done()
                 
-                # Periodically save state for dashboard (throttle to avoid disk I/O spam)
-                if time.time() % 5 < 1: 
+                # Periodically save state for dashboard (every ~5 seconds)
+                now = time.time()
+                if now - self._last_save_time >= 5.0:
                     self._save_state()
+                    self._last_save_time = now
                     
             except asyncio.TimeoutError:
                 # Normal timeout, just check running flag
@@ -125,6 +135,9 @@ class PhantomEngine:
         """Save state to disk for the Streamlit dashboard."""
         try:
             state = self.risk_manager.get_status()
+            if hasattr(self, 'latest_signals'):
+                state['latest_signals'] = self.latest_signals
+                
             with open(self.state_file, 'w') as f:
                 json.dump(state, f)
         except Exception as e:
@@ -149,6 +162,3 @@ class PhantomEngine:
         
         # Save final state
         self._save_state()
-
-# Helper for pandas timezone parsing in process_bar
-import pandas as pd

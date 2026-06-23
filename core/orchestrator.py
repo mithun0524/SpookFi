@@ -1,3 +1,13 @@
+"""
+PhantomOrchestrator — MOCK / STAGE-3 TESTING HARNESS
+
+This orchestrator uses a simulated (yfinance polling) market stream and an
+optional mock predictor so the frontend UI can be tested without real Alpaca
+credentials or a trained model.
+
+For production live trading, use engine/phantom.py (PhantomEngine) which
+connects to Alpaca's WebSocket stream and the real Executor.
+"""
 import asyncio
 import random
 from datetime import datetime, timezone
@@ -73,14 +83,15 @@ class PhantomOrchestrator:
                         minutes_since_open=120 # Pass time filter
                     )
                     
-                    if order:
+                if order:
                         logger.info(f"EXECUTING PAPER TRADE: {order}")
                         self.risk_manager.open_position(
                             symbol=order['symbol'],
                             side=order['side'],
                             entry_price=bar['close'],
                             qty=order['qty'],
-                            stop_loss=order['stop_loss']
+                            stop_loss=order['stop_loss'],
+                            take_profit=order.get('take_profit'),
                         )
 
             except Exception as e:

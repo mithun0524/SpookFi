@@ -5,6 +5,7 @@ from loguru import logger
 from datetime import datetime, timedelta
 
 from config import CONFIG
+from data.alt_data import fetch_fear_greed_history
 from features.engine import compute_features_batch
 from model.trainer import train_model, create_target, save_model
 
@@ -48,60 +49,53 @@ class TheForge:
                 # Fallback to config
                 symbols = list(CONFIG.universe.symbols)
                 
+            # 1. Determine Universe
+            symbols = CONFIG.universe.crypto_symbols
             if not symbols:
-                logger.warning("No symbols to train on.")
-                self.is_training = False
+                logger.error("No crypto symbols in config!")
                 return
-                
-            # 2. Download history
-            # Yahoo Finance limits 1m data to 7 days max. So we use 5m data for 60 days to train.
-            logger.info(f"The Forge: Downloading 60d of 5m data for {symbols}")
             
-            # Run download in a thread to not block asyncio
-            data = await asyncio.to_thread(
-                yf.download, 
-                tickers=symbols, 
-                period="60d", 
-                interval="5m", 
-                group_by="ticker", 
-                threads=True, 
-                progress=False
+            # 2. Fetch Base Data
+            logger.info(f"The Forge: Fetching historical crypto data for {len(symbols)} symbols...")
+            
+            from alpaca.data.historical import CryptoHistoricalDataClient
+            from alpaca.data.requests import CryptoBarsRequest
+            from alpaca.data.timeframe import TimeFrame
+            
+            client = CryptoHistoricalDataClient(CONFIG.alpaca.api_key, CONFIG.alpaca.secret_key)
+            req = CryptoBarsRequest(
+                symbol_or_symbols=symbols,
+                timeframe=TimeFrame.Minute,
+                start=pd.Timestamp.utcnow() - pd.Timedelta(days=60)
             )
+            bars = await asyncio.to_thread(client.get_crypto_bars, req)
+            df_multi = bars.df
             
-            # 2.5 Ingest Public Datasets (Alternative Data / Sentiment)
-            logger.info("The Forge: Ingesting Alternative Public Datasets (Social Sentiment, Fear & Greed Index)...")
-            await asyncio.sleep(2) # Simulate network call to public API
-            # In a full production scenario, we would merge these public datasets 
-            # into the dataframes as external regressors. For now, we simulate success.
-            logger.info("The Forge: Successfully digested global sentiment parameters.")
+            # 2.5 Fetch Real Alternative Data (Fear & Greed Index)
+            logger.info("The Forge: Fetching Fear & Greed Index history...")
+            fear_greed_series = await fetch_fear_greed_history(limit=90)
+            logger.info(f"The Forge: Got {len(fear_greed_series)} days of F&G data.")
             
             # 3. Compute Features
             logger.info("The Forge: Computing Advanced Mathematical Features...")
             all_features = []
             
             for ticker in symbols:
-                if len(symbols) == 1:
-                    df = data.copy()
-                else:
-                    if ticker not in data:
-                        continue
-                    df = data[ticker].copy()
-                    
-                if df.empty or df['Close'].isna().all():
+                if ticker not in df_multi.index.levels[0]:
+                    continue
+                df = df_multi.loc[ticker].copy()
+                
+                if df.empty or df['close'].isna().all():
                     continue
                     
-                # Clean yfinance columns (Open, High, Low, Close, Volume)
-                df.columns = [c.lower() for c in df.columns]
-                # Filter out timezone if any
                 df.index = df.index.tz_localize(None)
                 
-                is_crypto = "/" in ticker or "-" in ticker
-                
                 try:
-                    # Use the batch feature computation (includes Alchemist features)
-                    # We run this in a thread because it can be CPU heavy
-                    features_df = await asyncio.to_thread(compute_features_batch, df, is_crypto)
+                    features_df = await asyncio.to_thread(
+                        compute_features_batch, df, True, fear_greed_series
+                    )
                     features_df['symbol'] = ticker
+                    features_df['close'] = df['close']
                     all_features.append(features_df)
                 except Exception as e:
                     logger.error(f"Error computing features for {ticker}: {e}")
@@ -120,15 +114,19 @@ class TheForge:
             # We will group by symbol to avoid bleeding forward returns across symbols
             targets = []
             for sym, group in combined_df.groupby('symbol'):
-                t = create_target(group, horizon=CONFIG.model.target_horizon, 
-                                  buy_thresh=CONFIG.model.buy_threshold, 
+                t = create_target(group, horizon=CONFIG.model.forward_horizon,
+                                  buy_thresh=CONFIG.model.buy_threshold,
                                   sell_thresh=CONFIG.model.sell_threshold)
                 targets.append(t)
                 
             target_series = pd.concat(targets)
             
-            # We must drop non-numeric columns like 'symbol' before training
-            features_df = combined_df.drop(columns=['symbol'])
+            # Remove symbols and target from features
+            features_df = combined_df.drop(columns=['symbol', 'close'])
+            
+            # VERY IMPORTANT: Reset index to avoid pandas duplicate index explosion!
+            features_df = features_df.reset_index(drop=True)
+            target_series = target_series.reset_index(drop=True)
             
             # Run training in thread
             model, scaler, metrics = await asyncio.to_thread(

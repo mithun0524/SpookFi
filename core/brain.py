@@ -10,6 +10,9 @@ from features.engine import FeatureEngine
 from model.predictor import Predictor
 from model.forge import TheForge
 from risk.manager import RiskManager
+from notifications.telegram import (
+    alert_trade_opened, alert_trade_closed, alert_kill_switch
+)
 
 class SpookFiBrain:
     """
@@ -131,13 +134,40 @@ class SpookFiBrain:
                         side=order['side'],
                         entry_price=current_price,
                         qty=order['qty'],
-                        stop_loss=order['stop_loss']
+                        stop_loss=order['stop_loss'],
+                        take_profit=order.get('take_profit'),
                     )
+                    # Telegram alert (non-blocking)
+                    asyncio.create_task(alert_trade_opened(
+                        symbol=order['symbol'],
+                        side=order['side'],
+                        qty=order['qty'],
+                        entry_price=current_price,
+                        stop_loss=order['stop_loss'],
+                        take_profit=order.get('take_profit', current_price),
+                        confidence=confidence,
+                    ))
                     
                 # Update open positions PnL and Stops
                 close_signal = self.risk_manager.update_position(symbol, current_price, atr)
                 if close_signal == 'CLOSE':
-                    self.risk_manager.close_position(symbol, current_price)
+                    summary = self.risk_manager.close_position(symbol, current_price)
+                    if summary:
+                        asyncio.create_task(alert_trade_closed(
+                            symbol=symbol,
+                            side=summary['side'],
+                            entry_price=summary['entry_price'],
+                            exit_price=current_price,
+                            pnl=summary['pnl'],
+                        ))
+                    # Check if kill switch just triggered
+                    if self.risk_manager.is_kill_switch_active() \
+                            and not self.risk_manager._kill_switch_fired:
+                        self.risk_manager._kill_switch_fired = True
+                        asyncio.create_task(alert_kill_switch(
+                            daily_pnl=self.risk_manager.daily_pnl,
+                            equity=self.risk_manager.current_equity,
+                        ))
                     
             except Exception as e:
                 logger.error(f"Error processing {symbol}: {e}")

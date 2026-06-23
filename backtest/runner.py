@@ -36,22 +36,22 @@ class Backtester:
         df['signal'] = predictions['signal']
         df['confidence'] = predictions['confidence']
         
-        # 4. Simulate Trading (Vectorized)
+        # 4. Simulate Trading with proper state tracking
         # Shift signals by 1 to simulate execution on NEXT bar open
-        df['execution_signal'] = df['signal'].shift(1)
-        
-        # Basic vectorized PnL calculation (simplified for speed)
-        # Long only for simplicity in this baseline vectorized version
-        df['position'] = 0
-        df.loc[df['execution_signal'] == 'BUY', 'position'] = 1
-        # df.loc[df['execution_signal'] == 'SELL', 'position'] = -1 # Uncomment for shorting
-        
-        # Forward fill position until a SELL signal
-        # (A real stateful backtest is better, but vectorized is much faster for a quick pass)
-        df['position'] = df['position'].replace(0, np.nan)
-        df.loc[df['execution_signal'] == 'SELL', 'position'] = 0
-        # Forward fill positions for bars where no signal fired, fill initial with 0
-        df['position'] = df['position'].ffill().fillna(0)
+        df['execution_signal'] = df['signal'].shift(1).fillna('HOLD')
+
+        # Stateful position tracking: 0 = flat, 1 = long, -1 = short
+        positions = []
+        current_pos = 0
+        for sig in df['execution_signal']:
+            if sig == 'BUY' and current_pos <= 0:
+                current_pos = 1
+            elif sig == 'SELL' and current_pos >= 0:
+                current_pos = -1   # Flip to short or close long
+            # If already in direction, stay (no pyramid)
+            positions.append(current_pos)
+
+        df['position'] = positions
         
         # Calculate returns
         df['market_return'] = df['close'].pct_change()

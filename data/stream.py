@@ -1,108 +1,122 @@
+"""
+MarketDataStream — Real-time Crypto WebSocket via Alpaca.
+Supports native async streaming.
+"""
 import asyncio
-import yfinance as yf
-from datetime import datetime, timezone
+from datetime import datetime
 from loguru import logger
-from config import CONFIG
 import pandas as pd
+from config import CONFIG
+from alpaca.data.live import CryptoDataStream
+from alpaca.data.historical import CryptoHistoricalDataClient
+from alpaca.data.requests import CryptoBarsRequest
+from alpaca.data.timeframe import TimeFrame
 
 class MarketDataStream:
-    def __init__(self, queue: asyncio.Queue):
-        self.queue = queue
-        self.running = False
-        logger.info("Initialized Yahoo Finance Polling Stream for Indian Market.")
+    """
+    Subscribes to Alpaca's Crypto WebSocket and pushes 1-minute bars
+    into the asyncio Queue consumed by the engine.
+    Also handles historical warmup natively.
+    """
 
-    async def _fetch_and_process(self, symbols):
-        """Fetch 1-minute data for all symbols and push the latest bar to queue."""
-        if not symbols: return
+    def __init__(self, queue: asyncio.Queue, symbols: list[str] | None = None):
+        self.queue = queue
+        self._symbols = symbols or list(CONFIG.universe.crypto_symbols)
+        self.running = False
         
+        # We must initialize the Alpaca stream
+        self.stream = CryptoDataStream(CONFIG.alpaca.api_key, CONFIG.alpaca.secret_key)
+        self.hist_client = CryptoHistoricalDataClient(CONFIG.alpaca.api_key, CONFIG.alpaca.secret_key)
+        
+        logger.info(f"Initialized Alpaca Crypto WebSocket for {len(self._symbols)} symbols: {self._symbols}")
+
+    def set_symbols(self, symbols: list[str]):
+        """Hot-swap the symbol list (called on regime switch)."""
+        logger.warning("Hot-swapping WebSocket symbols requires a restart. Ignoring.")
+
+    async def _bar_handler(self, bar):
+        """Callback for new bars from the websocket."""
         try:
-            # yfinance allows downloading multiple tickers at once
-            # e.g., 'RELIANCE.NS TCS.NS'
-            tickers_str = " ".join(symbols)
-            
-            # Fetch the last 1 day of 1-minute data
-            # Run in executor to avoid blocking the asyncio loop
-            loop = asyncio.get_event_loop()
-            df = await loop.run_in_executor(
-                None, 
-                lambda: yf.download(tickers=tickers_str, period="1d", interval="1m", progress=False)
+            # bar is a CryptoBar object
+            b = {
+                "timestamp": bar.timestamp,
+                "symbol": bar.symbol,
+                "open": float(bar.open),
+                "high": float(bar.high),
+                "low": float(bar.low),
+                "close": float(bar.close),
+                "volume": float(bar.volume),
+                "vwap": float(bar.vwap)
+            }
+            await self.queue.put(b)
+        except Exception as e:
+            logger.error(f"Error handling websocket bar: {e}")
+
+    async def _warmup_symbols(self):
+        """Fetch historical data for warmup (last 40 bars) and enqueue."""
+        try:
+            logger.info("Fetching historical warmup data from Alpaca...")
+            request_params = CryptoBarsRequest(
+                symbol_or_symbols=self._symbols,
+                timeframe=TimeFrame.Minute,
+                start=pd.Timestamp.utcnow() - pd.Timedelta(minutes=50)
             )
             
-            if df.empty:
+            # Fetch history in thread
+            bars = await asyncio.to_thread(self.hist_client.get_crypto_bars, request_params)
+            df = bars.df
+            
+            if df is None or df.empty:
+                logger.warning("Historical fetch returned empty data.")
                 return
 
-            # yfinance returns a MultiIndex column DataFrame if multiple tickers are requested.
-            # Columns: (PriceType, Ticker)
-            # If only 1 ticker, it's single index. Let's handle both.
-            
-            if isinstance(df.columns, pd.MultiIndex):
-                for sym in symbols:
-                    try:
-                        # Extract data for this specific symbol
-                        sym_df = df.xs(sym, level=1, axis=1).dropna()
-                        if sym_df.empty: continue
-                        
-                        # Get the absolute latest minute bar
-                        latest = sym_df.iloc[-1]
-                        timestamp = sym_df.index[-1]
-                        
-                        bar_dict = {
-                            'timestamp': timestamp,
-                            'symbol': sym,
-                            'open': float(latest['Open']),
-                            'high': float(latest['High']),
-                            'low': float(latest['Low']),
-                            'close': float(latest['Close']),
-                            'volume': float(latest['Volume']),
-                            'vwap': float(latest['Close']) # yf doesn't give VWAP at 1m, use close
+            for sym in self._symbols:
+                if sym in df.index.levels[0]:
+                    sym_df = df.loc[sym].dropna()
+                    for timestamp, row in sym_df.tail(40).iterrows():
+                        b = {
+                            "timestamp": timestamp,
+                            "symbol": sym,
+                            "open": float(row.open),
+                            "high": float(row.high),
+                            "low": float(row.low),
+                            "close": float(row.close),
+                            "volume": float(row.volume),
+                            "vwap": float(row.vwap)
                         }
-                        await self.queue.put(bar_dict)
-                    except Exception as e:
-                        logger.warning(f"Could not parse yfinance data for {sym}: {e}")
-            else:
-                # Single ticker fallback
-                sym = symbols[0]
-                latest = df.iloc[-1]
-                timestamp = df.index[-1]
-                bar_dict = {
-                    'timestamp': timestamp,
-                    'symbol': sym,
-                    'open': float(latest['Open']),
-                    'high': float(latest['High']),
-                    'low': float(latest['Low']),
-                    'close': float(latest['Close']),
-                    'volume': float(latest['Volume']),
-                    'vwap': float(latest['Close'])
-                }
-                await self.queue.put(bar_dict)
-                
+                        await self.queue.put(b)
+            logger.success("Warmup complete. All historical bars pushed to queue.")
         except Exception as e:
-            logger.error(f"Error fetching yfinance data: {e}")
+            logger.error(f"Error during warmup: {e}")
 
     async def start(self):
-        """Start the polling loop."""
+        """Start the WebSocket and warmup sequence."""
         self.running = True
-        symbols = list(CONFIG.universe.symbols)
-        logger.info(f"Starting yfinance 1m polling for: {symbols}")
         
-        while self.running:
-            await self.fetch_cycle(symbols)
-            # Wait for 60 seconds before polling again
-            await asyncio.sleep(60)
+        # 1. Push warmup data to queue
+        await self._warmup_symbols()
+        
+        # 2. Subscribe to live bars
+        self.stream.subscribe_bars(self._bar_handler, *self._symbols)
+        
+        logger.info(f"Starting Alpaca WebSocket loop...")
+        # stream.run() is blocking, so we use run_forever inside a thread, or we await it.
+        # alpaca-py handles the asyncio event loop gracefully if we run it in a separate thread.
+        # Actually, CryptoDataStream uses its own thread internally sometimes, but _run_forever() is async.
+        try:
+            # We wrap the run in a task
+            asyncio.create_task(self.stream._run_forever())
+        except Exception as e:
+            logger.error(f"Failed to start stream: {e}")
             
-    async def fetch_cycle(self, symbols):
-        logger.debug("Polling Yahoo Finance...")
-        await self._fetch_and_process(symbols)
+        while self.running:
+            await asyncio.sleep(1)
 
     async def stop(self):
-        """Stop the polling loop."""
-        logger.info("Stopping Yahoo Finance Polling Stream...")
+        """Stop the stream gracefully."""
+        logger.info("Stopping MarketDataStream...")
         self.running = False
-
-# Helper functions
-async def start_stream(queue: asyncio.Queue):
-    stream = MarketDataStream(queue)
-    await stream.start()
-
-async def stop_stream(stream: MarketDataStream):
-    await stream.stop()
+        try:
+            self.stream.stop()
+        except Exception:
+            pass

@@ -5,7 +5,7 @@ import sys
 
 from config import CONFIG
 from data.fetcher import fetch_historical
-from model.retrain import retrain
+from model.forge import TheForge
 from backtest.runner import Backtester
 from engine.phantom import PhantomEngine
 
@@ -42,8 +42,8 @@ def main():
              fetch_historical(symbol, CONFIG.universe.history_days, CONFIG.universe.timeframe.lower())
              
     elif args.command == "train":
-        logger.info("Running training pipeline...")
-        retrain()
+        logger.info("Running advanced training pipeline via The Forge...")
+        asyncio.run(TheForge().train_model())
         
     elif args.command == "backtest":
         runner = Backtester()
@@ -51,11 +51,19 @@ def main():
         
     elif args.command == "run":
         engine = PhantomEngine()
+
+        async def _run():
+            try:
+                await engine.start()
+            except Exception as exc:
+                logger.error(f"Engine error: {exc}")
+            finally:
+                await engine.stop()
+
         try:
-            asyncio.run(engine.start())
+            asyncio.run(_run())
         except KeyboardInterrupt:
-            logger.info("Keyboard interrupt received. Shutting down...")
-            asyncio.run(engine.stop())
+            logger.info("Keyboard interrupt received. Engine will stop cleanly.")
             
     else:
         parser.print_help()

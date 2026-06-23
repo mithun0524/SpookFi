@@ -77,7 +77,7 @@ class FeatureConfig:
     market_minutes: int = 390
 
     # Total expected features
-    expected_feature_count: int = 23
+    expected_feature_count: int = 24
 
     # Feature names (for consistency across training and inference)
     feature_names: tuple = (
@@ -104,6 +104,7 @@ class FeatureConfig:
         "kalman_diff",
         "avs_signal",
         "efficiency_ratio",
+        "fear_greed_index",   # Alternative sentiment data
     )
 
 
@@ -210,6 +211,18 @@ class LogConfig:
     engine_log_file: str = "phantom.log"
 
 
+# ─── Telegram Notifications ──────────────────────────────────────────────────
+
+@dataclass
+class TelegramConfig:
+    bot_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    chat_id: str = os.getenv("TELEGRAM_CHAT_ID", "")
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.bot_token and self.chat_id)
+
+
 # ─── Master Config ───────────────────────────────────────────────────────────
 import json
 from pathlib import Path
@@ -224,31 +237,44 @@ class PhantomConfig:
     backtest: BacktestConfig = field(default_factory=BacktestConfig)
     dashboard: DashboardConfig = field(default_factory=DashboardConfig)
     log: LogConfig = field(default_factory=LogConfig)
+    telegram: TelegramConfig = field(default_factory=TelegramConfig)
     
     def load_settings(self, path: str = "settings.json"):
         if not Path(path).exists():
             return
         try:
             with open(path, "r") as f:
-                data = json.load(f)
-            
-            # Update Alpaca
-            if "alpaca" in data:
-                for k, v in data["alpaca"].items():
-                    setattr(self.alpaca, k, v)
-                    
-            # Update Universe
-            if "universe" in data:
-                for k, v in data["universe"].items():
-                    if k in ("symbols", "crypto_symbols"):
-                        setattr(self.universe, k, tuple(v))
-                    else:
-                        setattr(self.universe, k, v)
-                        
-            # Update Risk
-            if "risk" in data:
-                for k, v in data["risk"].items():
-                    setattr(self.risk, k, v)
+                config_data = json.load(f)
+
+            section_map = {
+                "alpaca": self.alpaca,
+                "universe": self.universe,
+                "features": self.features,
+                "model": self.model,
+                "risk": self.risk,
+                "backtest": self.backtest,
+                "dashboard": self.dashboard,
+                "log": self.log,
+                "telegram": self.telegram,
+            }
+
+            for section_key, section_obj in section_map.items():
+                if section_key in config_data:
+                    for key, value in config_data[section_key].items():
+                        # Skip properties (like base_url)
+                        if hasattr(type(section_obj), key) and isinstance(getattr(type(section_obj), key), property):
+                            continue
+                            
+                        if hasattr(section_obj, key):
+                            if key == "xgb_params" and isinstance(value, dict):
+                                getattr(section_obj, key).update(value)
+                            elif key in ("symbols", "crypto_symbols", "feature_names", "return_windows") and isinstance(value, list):
+                                setattr(section_obj, key, tuple(value))
+                                if key == "feature_names":
+                                    section_obj.expected_feature_count = len(value)
+                            else:
+                                setattr(section_obj, key, value)
+                                
         except Exception as e:
             print(f"Error loading settings: {e}")
 

@@ -3,10 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SpookFi | Ghostly Trading</title>
+    <title>SpookFi | Autonomous Trading Engine</title>
+    <meta name="description" content="SpookFi — AI-powered autonomous trading engine for Indian equities and global crypto.">
     <link rel="stylesheet" href="/static/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Chart.js for equity curve -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -16,13 +19,18 @@
                 <i class="ph-fill ph-ghost" style="font-size: 2rem; color: var(--accent-primary);"></i>
                 <span style="font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 1.5rem;">SpookFi</span>
             </div>
-            
+
             <ul class="nav-links">
-                <li class="nav-item active" data-tab="dashboard">
+                <li class="nav-item active" data-tab="dashboard" id="nav-dashboard">
                     <i class="ph ph-squares-four"></i> Dashboard
                 </li>
-
-                <li class="nav-item" data-tab="roadmap">
+                <li class="nav-item" data-tab="performance" id="nav-performance">
+                    <i class="ph ph-chart-line-up"></i> Performance
+                </li>
+                <li class="nav-item" data-tab="trades" id="nav-trades">
+                    <i class="ph ph-list-bullets"></i> Trade Log
+                </li>
+                <li class="nav-item" data-tab="roadmap" id="nav-roadmap">
                     <i class="ph ph-map-trifold"></i> Roadmap
                 </li>
             </ul>
@@ -33,25 +41,30 @@
                     <i class="ph ph-moon" id="theme-icon-dark" style="display: none;"></i>
                     <span id="theme-text">Light Mode</span>
                 </button>
-                <div class="system-status mt-2">
-                    <div class="status-indicator live"></div>
-                    <span>Engine Online</span>
+                <div class="system-status mt-2" id="connection-status">
+                    <div class="status-indicator connecting"></div>
+                    <span id="status-label">Connecting...</span>
                 </div>
             </div>
         </nav>
 
         <!-- Main Content Area -->
         <main class="content-area">
-            
-            <!-- Dashboard Tab -->
+
+            <!-- ─── Dashboard Tab ─────────────────────────────────── -->
             <section id="dashboard" class="tab-content active">
                 <header>
                     <div class="header-content">
                         <h1>Overview</h1>
-                        <p>Real-time trading performance and system metrics.</p>
+                        <p>Real-time performance and engine metrics.</p>
+                    </div>
+                    <div id="kill-switch-banner" class="kill-switch-banner" style="display:none;">
+                        <i class="ph-fill ph-warning"></i>
+                        KILL SWITCH ACTIVE — Trading halted for today.
                     </div>
                 </header>
 
+                <!-- Top stats row -->
                 <div class="stats-grid">
                     <div class="stat-card panel">
                         <div class="stat-header">
@@ -59,6 +72,15 @@
                             <i class="ph-fill ph-currency-dollar"></i>
                         </div>
                         <div class="value positive" id="dash-pnl">+₹0.00</div>
+                        <div class="stat-sub" id="dash-drawdown">Drawdown: 0.0%</div>
+                    </div>
+                    <div class="stat-card panel">
+                        <div class="stat-header">
+                            <h3>Portfolio Equity</h3>
+                            <i class="ph-fill ph-bank"></i>
+                        </div>
+                        <div class="value" id="dash-equity">₹0</div>
+                        <div class="stat-sub">Total capital</div>
                     </div>
                     <div class="stat-card panel">
                         <div class="stat-header">
@@ -66,6 +88,7 @@
                             <i class="ph-fill ph-magic-wand"></i>
                         </div>
                         <div class="value" id="dash-winrate">0.0%</div>
+                        <div class="stat-sub" id="dash-tradecount">0 trades</div>
                     </div>
                     <div class="stat-card panel">
                         <div class="stat-header">
@@ -73,10 +96,12 @@
                             <i class="ph-fill ph-ghost"></i>
                         </div>
                         <div class="value" id="dash-positions-count">0</div>
+                        <div class="stat-sub">Open positions</div>
                     </div>
                 </div>
 
-                <div class="stats-grid mt-4">
+                <!-- Brain context row -->
+                <div class="stats-grid mt-3" style="grid-template-columns: 1fr 2fr;">
                     <div class="stat-card panel">
                         <div class="stat-header">
                             <h3>Current Realm</h3>
@@ -84,44 +109,125 @@
                         </div>
                         <div class="value" id="dash-regime">INIT</div>
                     </div>
-                    <div class="stat-card panel" style="grid-column: span 2;">
+                    <div class="stat-card panel">
                         <div class="stat-header">
                             <h3>Spooky Targets</h3>
                             <i class="ph-fill ph-crosshair"></i>
                         </div>
-                        <div class="value" id="dash-hunted" style="font-size: 1.2rem; font-weight: 500;">Scanning Universe...</div>
+                        <div class="value" id="dash-hunted" style="font-size: 1rem; font-weight: 500; letter-spacing: 0.02em;">Scanning Universe...</div>
                     </div>
                 </div>
 
-                <div class="positions-panel panel mt-4">
+                <!-- Positions table -->
+                <div class="positions-panel panel mt-3">
                     <div class="panel-header">
                         <h2>Ghost Bags</h2>
+                        <span class="badge" id="positions-badge">0 open</span>
                     </div>
                     <div class="table-container">
-                        <table class="data-table">
+                        <table class="data-table" id="positions-table">
                             <thead>
                                 <tr>
-                                    <th>Token / Ticker</th>
+                                    <th>Symbol</th>
                                     <th>Side</th>
-                                    <th class="text-right">Unrealized Loot</th>
+                                    <th class="text-right">Entry</th>
+                                    <th class="text-right">Take Profit</th>
+                                    <th class="text-right">Stop</th>
+                                    <th class="text-right">Unrealized P&L</th>
                                 </tr>
                             </thead>
                             <tbody id="positions-tbody">
-                                <!-- Populated by JS -->
+                                <tr class="empty-row"><td colspan="6">No open positions — the ghost is hunting 👻</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </section>
 
+            <!-- ─── Performance Tab ───────────────────────────────── -->
+            <section id="performance" class="tab-content">
+                <header>
+                    <div class="header-content">
+                        <h1>Performance</h1>
+                        <p>Live equity curve and portfolio analytics.</p>
+                    </div>
+                </header>
 
-            <!-- Roadmap Tab -->
+                <!-- Equity Curve Chart -->
+                <div class="panel chart-panel mt-2">
+                    <div class="panel-header">
+                        <h2><i class="ph ph-chart-line-up"></i> Equity Curve</h2>
+                        <div class="chart-controls">
+                            <button class="chart-range-btn active" data-range="all" id="btn-range-all">All</button>
+                            <button class="chart-range-btn" data-range="50" id="btn-range-50">Last 50</button>
+                            <button class="chart-range-btn" data-range="20" id="btn-range-20">Last 20</button>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="equity-chart"></canvas>
+                    </div>
+                    <div class="chart-stats-row">
+                        <div class="chart-stat">
+                            <span class="chart-stat-label">Peak Equity</span>
+                            <span class="chart-stat-value" id="perf-peak">₹0</span>
+                        </div>
+                        <div class="chart-stat">
+                            <span class="chart-stat-label">Max Drawdown</span>
+                            <span class="chart-stat-value negative" id="perf-maxdd">0.0%</span>
+                        </div>
+                        <div class="chart-stat">
+                            <span class="chart-stat-label">Total Return</span>
+                            <span class="chart-stat-value" id="perf-return">0.0%</span>
+                        </div>
+                        <div class="chart-stat">
+                            <span class="chart-stat-label">Win Rate</span>
+                            <span class="chart-stat-value" id="perf-winrate">0.0%</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ─── Trade Log Tab ─────────────────────────────────── -->
+            <section id="trades" class="tab-content">
+                <header>
+                    <div class="header-content">
+                        <h1>Trade Log</h1>
+                        <p>Every ghost move, recorded.</p>
+                    </div>
+                </header>
+
+                <div class="panel mt-2">
+                    <div class="panel-header">
+                        <h2>Recent Trades</h2>
+                        <span class="badge" id="trades-badge">0 total</span>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Side</th>
+                                    <th class="text-right">Entry</th>
+                                    <th class="text-right">Exit</th>
+                                    <th class="text-right">Qty</th>
+                                    <th class="text-right">P&L</th>
+                                    <th>Time</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trades-tbody">
+                                <tr class="empty-row"><td colspan="7">No trades yet — model is warming up 🔥</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ─── Roadmap Tab ───────────────────────────────────── -->
             <section id="roadmap" class="tab-content">
                 <header>
                     <h1>Roadmap</h1>
                     <p>Development stages and milestone tracking.</p>
                 </header>
-
                 <div class="roadmap-timeline panel" id="roadmap-container">
                     <!-- Populated by JS -->
                 </div>

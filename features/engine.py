@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import ta
 from collections import deque
+from datetime import datetime, timezone
 from loguru import logger
 from config import CONFIG
 from features.alchemist import MathAlchemist
@@ -10,12 +11,21 @@ def get_feature_names() -> list[str]:
     """Return the exact list of feature names configured."""
     return list(CONFIG.features.feature_names)
 
-def compute_features_batch(df: pd.DataFrame, is_crypto: bool = False) -> pd.DataFrame:
+def compute_features_batch(
+    df: pd.DataFrame,
+    is_crypto: bool = False,
+    fear_greed: float | pd.Series | None = None,
+) -> pd.DataFrame:
     """
-    Compute all 20 features on a full DataFrame in batch mode.
+    Compute all features on a full DataFrame in batch mode.
     Used for training and backtesting.
     Input df must have columns: open, high, low, close, volume.
-    Optionally: vwap.
+
+    Args:
+        fear_greed: Optional sentiment signal.
+            - float (0-1): applied as a constant to every row (real-time use)
+            - pd.Series with DatetimeIndex: merged by date (training use)
+            - None: defaults to 0.5 (neutral)
     """
     logger.info(f"Computing features for dataframe of shape {df.shape}")
     
@@ -115,11 +125,27 @@ def compute_features_batch(df: pd.DataFrame, is_crypto: bool = False) -> pd.Data
     df_avs = MathAlchemist.adaptive_volatility_surface(df, window=20)
     df['kalman_diff'] = (df['close'] - df_avs['kalman_base']) / df['close']
     df['avs_signal'] = df_avs['avs_signal']
-    
-    # Re-calculate efficiency ratio here or get from AVS
+
     net_change = abs(df['close'].diff(20))
     sum_abs_change = abs(df['close'].diff(1)).rolling(window=20).sum()
     df['efficiency_ratio'] = (net_change / (sum_abs_change + 1e-8)).fillna(0)
+
+    # 8. Alternative Data — Fear & Greed Index
+    if fear_greed is None:
+        df['fear_greed_index'] = 0.5  # Neutral
+    elif isinstance(fear_greed, (int, float)):
+        df['fear_greed_index'] = float(fear_greed)
+    elif isinstance(fear_greed, pd.Series):
+        # Align by date: forward-fill missing trading days
+        fg_daily = fear_greed.copy()
+        fg_daily.index = pd.to_datetime(fg_daily.index).normalize()
+        bar_dates = df.index.normalize() if isinstance(df.index, pd.DatetimeIndex) \
+            else pd.to_datetime(df.get('timestamp', df.index)).normalize()
+        df['fear_greed_index'] = bar_dates.map(
+            lambda d: fg_daily.asof(d) if d >= fg_daily.index[0] else 0.5
+        ).fillna(0.5).values
+    else:
+        df['fear_greed_index'] = 0.5
 
     # Extract exactly the configured features
     features = get_feature_names()
@@ -140,50 +166,56 @@ def compute_features_batch(df: pd.DataFrame, is_crypto: bool = False) -> pd.Data
 class FeatureEngine:
     """
     Incremental feature engine for real-time use.
-    Maintains state and computes features efficiently on each new bar.
+    Maintains a fixed-size ring buffer and computes features on each new bar.
+    Caches the Fear & Greed Index (refreshed hourly via asyncio task).
     """
     def __init__(self, symbol: str):
         self.symbol = symbol
-        self.is_crypto = "/" in symbol  # e.g., BTC/USD
-        self.max_window = 40 # Max lookback needed (30 + buffer)
-        self.history = pd.DataFrame()
+        self.is_crypto = "/" in symbol
+        self.max_window = 100
+        self._buffer: deque = deque(maxlen=self.max_window)
+        # Fear & Greed cache
+        self._fear_greed: float = 0.5
+        self._fg_last_fetched: datetime | None = None
         logger.info(f"Initialized FeatureEngine for {symbol} (Crypto: {self.is_crypto})")
-        
+
+    async def _maybe_refresh_fear_greed(self) -> None:
+        """Refresh cached F&G value at most once per hour."""
+        now = datetime.now(timezone.utc)
+        if self._fg_last_fetched is None or \
+                (now - self._fg_last_fetched).total_seconds() > 3600:
+            try:
+                from data.alt_data import fetch_fear_greed_current
+                self._fear_greed = await fetch_fear_greed_current()
+                self._fg_last_fetched = now
+            except Exception as e:
+                logger.warning(f"F&G refresh failed for {self.symbol}: {e}")
+
     def update(self, bar_dict: dict) -> dict[str, float]:
         """
         Update with a new bar and compute features.
-        Returns a dictionary of the 20 features.
+        Returns a dictionary of the configured features.
+        Note: F&G refresh is best-effort via sync call to cached value.
         """
-        # Convert single bar to DataFrame row
-        new_row = pd.DataFrame([bar_dict])
-        
-        # Ensure timestamp is datetime
-        if 'timestamp' in new_row.columns:
-            new_row['timestamp'] = pd.to_datetime(new_row['timestamp'])
-            new_row.set_index('timestamp', inplace=True)
-            
-        # Append to history
-        if self.history.empty:
-            self.history = new_row
-        else:
-            self.history = pd.concat([self.history, new_row])
-            
-        # Truncate history to max_window
-        if len(self.history) > self.max_window:
-            self.history = self.history.iloc[-self.max_window:]
-            
-        # We need at least the max window to compute all features reliably
-        # If not enough history, we compute what we can but some will be 0
-        
-        # Re-use the batch compute function on the rolling window
-        # In a hyper-optimized system, we would maintain running sums/vars,
-        # but for 40 rows pandas is fast enough (< 10ms)
+        self._buffer.append(bar_dict)
+
+        if len(self._buffer) < 35:
+            return {f: 0.0 for f in get_feature_names()}
+
+        history = pd.DataFrame(list(self._buffer))
+
+        if "timestamp" in history.columns:
+            history["timestamp"] = pd.to_datetime(history["timestamp"])
+            history.set_index("timestamp", inplace=True)
+
         try:
-            features_df = compute_features_batch(self.history, is_crypto=self.is_crypto)
-            # Get the features for the latest bar
-            latest_features = features_df.iloc[-1].to_dict()
-            return latest_features
+            features_df = compute_features_batch(
+                history,
+                is_crypto=self.is_crypto,
+                fear_greed=self._fear_greed,
+            )
+            return features_df.iloc[-1].to_dict()
         except Exception as e:
             logger.error(f"Error computing incremental features for {self.symbol}: {e}")
-            # Return zeros as fallback
             return {f: 0.0 for f in get_feature_names()}
+

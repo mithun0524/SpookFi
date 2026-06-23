@@ -3,6 +3,7 @@ from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest, GetOrdersRequest
 from alpaca.trading.enums import OrderSide, TimeInForce, QueryOrderStatus
 from config import CONFIG
+import os
 
 class Executor:
     """
@@ -42,16 +43,17 @@ class Executor:
                  symbol=symbol,
                  qty=qty,
                  side=side,
-                 time_in_force=TimeInForce.GTC
+                 time_in_force=TimeInForce.DAY,  # DAY required for equities on Alpaca paper
              )
              res = self.client.submit_order(order_data=req)
+             logger.info(f"Order submitted: {res.id} | Status: {res.status}")
              return {
                  'id': str(res.id),
                  'status': res.status.value,
                  'filled_qty': float(res.filled_qty) if res.filled_qty else 0.0
              }
         except Exception as e:
-             logger.error(f"Error submitting order for {symbol}: {e}")
+             logger.error(f"Order submission failed for {symbol}: {e}")
              return None
 
     def close_all_positions(self):
@@ -67,13 +69,36 @@ class Executor:
              logger.error(f"Error closing positions: {e}")
              
     def get_account_equity(self) -> float:
-        """Get current account equity."""
+        """Get current account equity from Alpaca."""
         if self.client is None:
              return CONFIG.risk.initial_capital
-             
+
         try:
              account = self.client.get_account()
-             return float(account.equity)
+             equity = float(account.equity)
+             logger.info(f"Alpaca account equity: ${equity:,.2f} | Buying power: ${float(account.buying_power):,.2f}")
+             return equity
         except Exception as e:
-             logger.error(f"Error getting account: {e}")
+             logger.error(f"Error getting account equity: {e}")
              return CONFIG.risk.initial_capital
+
+    def get_open_positions(self) -> list[dict]:
+        """Fetch all open positions from Alpaca (used to sync state on restart)."""
+        if self.client is None:
+             return []
+        try:
+             positions = self.client.get_all_positions()
+             return [
+                 {
+                     'symbol': p.symbol,
+                     'side': 'long' if p.side.value == 'long' else 'short',
+                     'qty': abs(float(p.qty)),
+                     'avg_entry': float(p.avg_entry_price),
+                     'market_value': float(p.market_value),
+                     'unrealized_pnl': float(p.unrealized_pl),
+                 }
+                 for p in positions
+             ]
+        except Exception as e:
+             logger.error(f"Error fetching open positions: {e}")
+             return []

@@ -1,24 +1,24 @@
 {
     "alpaca": {
-        "api_key": "",
-        "secret_key": "",
+        "api_key": "PKE6XADJMASW5D4LCUXT2W5B24",
+        "secret_key": "CHDfAGtxBE8nR6eLnTRhgeCgXaDyX3NAVzvRXgCfHU6k",
         "base_url": "https://paper-api.alpaca.markets",
         "trading_mode": "paper"
     },
     "universe": {
-        "symbols": [
-            "RELIANCE.NS",
-            "TCS.NS",
-            "HDFCBANK.NS",
-            "INFY.NS",
-            "ICICIBANK.NS",
-            "SBIN.NS",
-            "BHARTIARTL.NS",
-            "ITC.NS",
-            "LART.NS",
-            "BAJFINANCE.NS"
-        ],
-        "crypto_symbols": []
+        "symbols": [],
+        "crypto_symbols": [
+            "BTC/USD",
+            "ETH/USD",
+            "SOL/USD",
+            "DOGE/USD",
+            "LTC/USD",
+            "BCH/USD",
+            "AVAX/USD",
+            "LINK/USD",
+            "UNI/USD",
+            "MATIC/USD"
+        ]
     },
     "risk": {
         "max_position_size": 0.1,
@@ -30,7 +30,7 @@
     "model": {
         "model_dir": "models",
         "update_frequency_hours": 24,
-        "confidence_threshold": 0.65
+        "confidence_threshold": 0.55
     },
     "features": {
         "feature_names": [

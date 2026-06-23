@@ -609,3 +609,139 @@ input:focus, select:focus {
 .badge.completed { background: var(--positive); color: #1a1a1a; }
 .badge.current { background: var(--accent-primary); color: #1a1a1a; }
 .badge.upcoming { background: var(--bg-tertiary); color: var(--text-primary); }
+
+/* Side badges in positions/trades tables */
+.badge.side-long  { background: var(--positive); color: #fff; border-color: #007a40; }
+.badge.side-short { background: var(--negative); color: #fff; border-color: #bb0000; }
+
+/* ─── Stat sub-label ─────────────────────────────────────────────── */
+.stat-sub {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+    font-weight: 500;
+}
+
+/* ─── Symbol Pills ───────────────────────────────────────────────── */
+.symbol-pill {
+    display: inline-block;
+    padding: 0.15rem 0.6rem;
+    margin: 0.15rem;
+    background: var(--accent-light, #FFF8B8);
+    color: #1a1a1a;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    border: 1.5px solid var(--border-color);
+}
+
+/* ─── Kill Switch Banner ─────────────────────────────────────────── */
+.kill-switch-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.75rem;
+    padding: 0.6rem 1rem;
+    background: var(--negative-bg, #FFC2C2);
+    border: 2.5px solid var(--negative, #FF4B4B);
+    border-radius: 8px;
+    font-weight: 700;
+    color: #7a0000;
+    box-shadow: var(--shadow-sm);
+    font-size: 0.9rem;
+}
+
+/* ─── Connection status ──────────────────────────────────────────── */
+.status-indicator.error { background: var(--negative); }
+.status-indicator.connecting {
+    background: var(--accent-primary);
+    animation: pulse 1.2s ease-in-out infinite;
+}
+
+/* ─── Empty table row ───────────────────────────────────────────── */
+.empty-row td {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* ─── Chart Panel ────────────────────────────────────────────────── */
+.chart-panel { padding: 0; overflow: hidden; }
+.chart-panel .panel-header {
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.chart-wrapper {
+    position: relative;
+    height: 320px;
+    padding: 1rem 1rem 0.5rem;
+    background: linear-gradient(180deg, rgba(168,85,247,0.04) 0%, transparent 100%);
+}
+
+.chart-controls {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.chart-range-btn {
+    padding: 0.25rem 0.7rem;
+    border: 2px solid var(--border-color);
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+}
+
+.chart-range-btn:hover,
+.chart-range-btn.active {
+    background: var(--accent-primary);
+    color: #1a1a1a;
+    border-color: #1a1a1a;
+    box-shadow: var(--shadow-sm);
+}
+
+/* ─── Chart Performance Stats Row ───────────────────────────────── */
+.chart-stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 2px solid var(--border-color);
+}
+
+.chart-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.9rem 1rem;
+    border-right: 2px solid var(--border-color);
+}
+.chart-stat:last-child { border-right: none; }
+
+.chart-stat-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-muted);
+    margin-bottom: 0.3rem;
+}
+
+.chart-stat-value {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+.chart-stat-value.positive { color: var(--positive); }
+.chart-stat-value.negative { color: var(--negative); }
+
+/* ─── Trade log / Positions shared ─────────────────────────────── */
+.text-right { text-align: right !important; }
+.mt-3 { margin-top: 1.25rem; }
