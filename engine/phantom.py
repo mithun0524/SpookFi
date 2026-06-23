@@ -68,7 +68,7 @@ class PhantomEngine:
         adx = features.get('adx_14', 0.0) * 100.0 # denormalize
         
         # Calculate raw minutes since open (from timestamp)
-        dt = pd.to_datetime(bar['timestamp']).tz_convert('America/New_York') if isinstance(bar['timestamp'], pd.Timestamp) else pd.to_datetime(bar['timestamp'])
+        dt = pd.to_datetime(bar['timestamp'], utc=True).tz_convert('America/New_York')
         mins_from_midnight = dt.hour * 60 + dt.minute
         mins_since_open = mins_from_midnight - 570 # 9:30 AM
         

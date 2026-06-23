@@ -205,7 +205,7 @@ class FeatureEngine:
         history = pd.DataFrame(list(self._buffer))
 
         if "timestamp" in history.columns:
-            history["timestamp"] = pd.to_datetime(history["timestamp"])
+            history["timestamp"] = pd.to_datetime(history["timestamp"], utc=True)
             history.set_index("timestamp", inplace=True)
 
         try:
